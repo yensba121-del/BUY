@@ -63,9 +63,12 @@ td input:disabled{opacity:.35}
 <label>品項（小類）<select id="it"></select></label>
 <label>搜尋<input id="q" type="search" placeholder="PO、供應商、品項、B/L…"></label>
 <button id="ex" class="g">匯出填寫資料</button>
+<button id="bk" class="g" title="把訂單明細與填寫資料一次存成一個檔案">完整備份</button>
+<button id="rb" class="g" title="從備份檔還原訂單明細與填寫資料">還原備份</button>
+<input type="file" id="rs" accept=".json,application/json" hidden>
 <span id="sv" class="sub" style="margin:0;align-self:center"></span>
 </div>
-<datalist id="crs"><option>長榮海運</option><option>陽明海運</option><option>萬海航運</option><option>Maersk</option><option>MSC</option><option>Hapag-Lloyd</option><option>CMA CGM</option><option>ONE</option><option>COSCO</option><option>HMM</option><option>ZIM</option><option>OOCL</option></datalist>
+<datalist id="crs"><option>長榮海運</option><option>陽明海運</option><option>萬海航運</option><option>Maersk</option><option>MSC</option><option>Hapag-Lloyd</option><option>CMA CGM</option><option>ONE</option><option>COSCO</option><option>HMM</option><option>ZIM</option><option>OOCL</option><option>WiseGrid</option></datalist>
 <div id="diff"></div>
 <div id="out"><div class="empty">請先上傳訂單明細檔。上傳後資料會保留在頁面上，下次開啟不需重新上傳；再上傳新檔時，會先和現有資料比對，確認後才更新。</div></div>
 </main>
@@ -115,7 +118,10 @@ const CARRIERS=[
  ['cosco|中遠','中遠海運 COSCO','https://elines.coscoshipping.com/ebusiness/cargoTracking'],
  ['hmm|現代商船','HMM','https://www.hmm21.com/e-service/general/trackNTrace/TrackNTrace.do'],
  ['zim|以星','ZIM','https://www.zim.com/tools/track-a-shipment'],
- ['oocl|東方海外','OOCL','https://www.oocl.com/eng/ourservices/eservices/cargotracking/']];
+ ['oocl|東方海外','OOCL','https://www.oocl.com/eng/ourservices/eservices/cargotracking/'],
+ ['wisegrid','WiseGrid 平台（需登入）','https://www-ad8prd.wisegrid.net/Portals/NEO/Desktop#/login/index']];
+const CR_DEF={F2600294:'WiseGrid'};
+const crOf=o=>fx(o,'cr')||CR_DEF[o.po]||'';
 function trkFind(cr){const c=String(cr||'').trim().toLowerCase();if(!c)return null;return CARRIERS.find(x=>x[0].split('|').some(k=>c.includes(k)))||null}
 function trkUrl(cr,bl){const f=trkFind(cr);return f?f[2].replace('{bl}',encodeURIComponent(bl)):'https://www.searates.com/container/tracking/?number='+encodeURIComponent(bl)}
 function trkName(cr){const f=trkFind(cr);return f?'前往'+f[1]+'查詢':'未指定船公司，前往 SeaRates 通用查詢'}
@@ -155,7 +161,7 @@ function render(){
  <div class="two">${mtab('依 PO 建立日（建檔年月）',group(L,'cd'))}${mtab('依到港日',group(L,'ad'))}</div>
  <div class="card"><h2>訂單追蹤（同一採購單號為一筆）</h2><div class="sc" style="max-height:560px"><table class="trk"><tr><th>進度</th><th>建檔年月</th><th>PO號碼</th><th>品項</th><th>來源</th><th>供應商</th><th>PI單號</th><th>INV號碼</th><th>B/L號碼</th><th>船公司</th><th>查進度</th><th>H號</th><th>SPS</th><th>到港日</th><th class="n">匯率</th><th>關稅%</th><th class="n">金額(萬)</th><th>報關日</th><th>放行日</th><th>拆櫃日</th><th>入庫日</th></tr>`+
  L.map(o=>{const s=status(o),S=o.po[0].toUpperCase()==='S',CUS=!'DCN'.includes(o.po[0].toUpperCase()),F=o.po[0].toUpperCase()==='F',i=(k,t,c)=>`<input ${c||''} type="${t}" value="${e(fx(o,k))}" data-p="${e(o.po)}" data-k="${k}">`;
-  return `<tr><td><span class="st ${s[1]}">${s[0]}</span></td><td>${ym(o.cd)}</td><td>${e(o.po)}</td><td class="it" title="${e(allIt(o))}">${e(topIt(o))||'—'}</td><td>${SRC[o.po[0].toUpperCase()]||'—'}</td><td>${e(o.sup)}</td><td>${i('pi','text')}</td><td>${i('inv','text')}</td><td>${i('bl','text')}</td><td>${i('cr','text','list="crs"')}</td><td style="text-align:center">${fx(o,'bl')?`<a class="trkbtn" target="_blank" rel="noopener" data-bl="${e(fx(o,'bl'))}" href="${e(trkUrl(fx(o,'cr'),fx(o,'bl')))}" title="${e(trkName(fx(o,'cr')))}（已複製 B/L 號碼）">查進度</a>`:'<span class="trkbtn off">查進度</span>'}</td><td>${S?i('h','text','class="s"'):'<input class="s" disabled>'}</td><td style="text-align:center"><input type="checkbox" ${S?'':'disabled'} ${fx(o,'sps')==='1'?'checked':''} data-p="${e(o.po)}" data-k="sps"></td><td>${ymd(o.ad)}</td><td class="n">${num(rt(o),3)}</td><td><input class="s${tf(o)===''?' need':''}" type="number" step="0.1" value="${e(tf(o))}" data-p="${e(o.po)}" data-k="t"></td><td class="n">${num(amt(o))}</td>${['c','r','u'].map(k=>`<td>${CUS?i(k,'date'):'<input disabled>'}</td>`).join('')}<td>${(!CUS||F)?i('s','date'):'<input disabled>'}</td></tr>`}).join('')+`</table></div></div>`;
+  return `<tr><td><span class="st ${s[1]}">${s[0]}</span></td><td>${ym(o.cd)}</td><td>${e(o.po)}</td><td class="it" title="${e(allIt(o))}">${e(topIt(o))||'—'}</td><td>${SRC[o.po[0].toUpperCase()]||'—'}</td><td>${e(o.sup)}</td><td>${i('pi','text')}</td><td>${i('inv','text')}</td><td>${i('bl','text')}</td><td><input list="crs" type="text" value="${e(crOf(o))}" data-p="${e(o.po)}" data-k="cr"></td><td style="text-align:center">${(fx(o,'bl')||trkFind(crOf(o)))?`<a class="trkbtn" target="_blank" rel="noopener" data-bl="${e(fx(o,'bl'))}" href="${e(trkUrl(crOf(o),fx(o,'bl')))}" title="${e(trkName(crOf(o)))}（已複製 B/L 號碼）">查進度</a>`:'<span class="trkbtn off">查進度</span>'}</td><td>${S?i('h','text','class="s"'):'<input class="s" disabled>'}</td><td style="text-align:center"><input type="checkbox" ${S?'':'disabled'} ${fx(o,'sps')==='1'?'checked':''} data-p="${e(o.po)}" data-k="sps"></td><td>${ymd(o.ad)}</td><td class="n">${num(rt(o),3)}</td><td><input class="s${tf(o)===''?' need':''}" type="number" step="0.1" value="${e(tf(o))}" data-p="${e(o.po)}" data-k="t"></td><td class="n">${num(amt(o))}</td>${['c','r','u'].map(k=>`<td>${CUS?i(k,'date'):'<input disabled>'}</td>`).join('')}<td>${(!CUS||F)?i('s','date'):'<input disabled>'}</td></tr>`}).join('')+`</table></div></div>`;
 }
 function rerender(){
  const sc=[...document.querySelectorAll('.sc')].map(x=>[x.scrollTop,x.scrollLeft]),y=window.scrollY,a=document.activeElement,k=a&&a.dataset&&a.dataset.p?[a.dataset.p,a.dataset.k]:null;
@@ -235,10 +241,28 @@ $('#f').addEventListener('change',async ev=>{
  const fs=[...ev.target.files].sort((a,b)=>(/填寫/.test(b.name)?1:0)-(/填寫/.test(a.name)?1:0));let staged=null;
  for(const f of fs){try{const r=ingest(readWb(await f.arrayBuffer()));if(r)staged=r}catch(x){alert('無法讀取：'+f.name)}}
  setup();render();if(staged)proposeUpdate(staged);ev.target.value='';});
+async function saveFile(name,data,mime){
+ let d=null;try{d=window.claude&&await claude.use('downloads')}catch(x){}
+ if(d){try{await d.save({filename:name,data})}catch(x){if(!x||x.code!=='declined')alert('下載失敗：'+((x&&x.message)||'未知錯誤'))}return}
+ const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([data],{type:mime}));a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},500)}
+$('#bk').addEventListener('click',()=>{
+ if(!pos.length&&!Object.keys(fill).length){alert('目前沒有資料可備份');return}
+ const t=new Date(),n=t.getFullYear()+p2(t.getMonth()+1)+p2(t.getDate());
+ saveFile('採購儀表板備份_'+n+'.json',JSON.stringify({app:'proc-dashboard',v:1,t:Date.now(),meta,pos:pos.map(ser),fill}),'application/json')});
+$('#rb').addEventListener('click',()=>$('#rs').click());
+$('#rs').addEventListener('change',async ev=>{
+ const f=ev.target.files[0];ev.target.value='';if(!f)return;
+ let j;try{j=JSON.parse(await f.text())}catch(x){alert('無法讀取備份檔');return}
+ if(!j||j.app!=='proc-dashboard'||!Array.isArray(j.pos)||!j.fill||typeof j.fill!=='object'){alert('這不是有效的備份檔');return}
+ if(!confirm('還原會以備份檔覆蓋目前的資料。\n\n目前：訂單 '+pos.length+' 筆、填寫資料 '+Object.keys(fill).length+' 筆\n備份檔：訂單 '+j.pos.length+' 筆、填寫資料 '+Object.keys(j.fill).length+' 筆\n\n確定還原？'))return;
+ if(DB){pos.forEach(o=>dirtyM.add(mkey(o)));Object.keys(fill).forEach(k=>dirty.add(k))}
+ pos=j.pos.map(de);fill=j.fill;meta=j.meta&&j.meta.t?j.meta:{t:j.t||Date.now()};save();saveOrdersLocal();
+ if(DB){pos.forEach(o=>dirtyM.add(mkey(o)));Object.keys(fill).forEach(k=>dirty.add(k));flush()}
+ pending=null;$('#diff').innerHTML='';setup();render();stat()});
 $('#ex').addEventListener('click',async()=>{
  if(!pos.length){alert('請先上傳訂單明細');return}
  const H=['建檔年月','PO號碼','品項','PI單號','INV號碼','B/L號碼','船公司','H號','SPS','匯率','關稅%','報關日','放行日','拆櫃日','入庫日','來源','供應商','到港日','台幣採購金額(萬元)','進度'];
- const A=[H,...pos.map(o=>[ym(o.cd),o.po,topIt(o),fx(o,'pi'),fx(o,'inv'),fx(o,'bl'),fx(o,'cr'),fx(o,'h'),fx(o,'sps')==='1'?'V':'',+rt(o).toFixed(3),tf(o),fx(o,'c'),fx(o,'r'),fx(o,'u'),fx(o,'s'),SRC[o.po[0].toUpperCase()]||'',o.sup,ymd(o.ad),+amt(o).toFixed(2),status(o)[0]])];
+ const A=[H,...pos.map(o=>[ym(o.cd),o.po,topIt(o),fx(o,'pi'),fx(o,'inv'),fx(o,'bl'),crOf(o),fx(o,'h'),fx(o,'sps')==='1'?'V':'',+rt(o).toFixed(3),tf(o),fx(o,'c'),fx(o,'r'),fx(o,'u'),fx(o,'s'),SRC[o.po[0].toUpperCase()]||'',o.sup,ymd(o.ad),+amt(o).toFixed(2),status(o)[0]])];
  const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(A),'訂單追蹤');const buf=XLSX.write(wb,{bookType:'xlsx',type:'array'});
  let d=null;try{d=window.claude&&await claude.use('downloads')}catch(x){}
  if(!d){XLSX.writeFile(wb,'採購追蹤_填寫資料.xlsx');return}
