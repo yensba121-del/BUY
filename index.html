@@ -36,6 +36,8 @@ td input[type=checkbox]{width:auto;padding:0;transform:scale(1.25)}
 #diff .card{margin-bottom:16px;border-color:var(--ac)}
 #diff table{margin:6px 0 12px}#diff td{white-space:normal}
 #diff .row{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:8px}
+a.trkbtn,span.trkbtn{display:inline-block;margin-left:4px;padding:3px 8px;border:1px solid var(--ac);border-radius:6px;color:var(--ac);text-decoration:none;font-size:12px}
+span.trkbtn.off{opacity:.35}
 td input:disabled{opacity:.35}
 .st{font-size:12px;padding:1px 8px;border-radius:10px;background:var(--ac2);color:var(--ac)}
 .st.w{background:transparent;border:1px solid var(--warn);color:var(--warn)}.st.o{color:var(--ok);background:transparent;border:1px solid var(--ok)}
@@ -63,6 +65,7 @@ td input:disabled{opacity:.35}
 <button id="ex" class="g">匯出填寫資料</button>
 <span id="sv" class="sub" style="margin:0;align-self:center"></span>
 </div>
+<datalist id="crs"><option>長榮海運</option><option>陽明海運</option><option>萬海航運</option><option>Maersk</option><option>MSC</option><option>Hapag-Lloyd</option><option>CMA CGM</option><option>ONE</option><option>COSCO</option><option>HMM</option><option>ZIM</option><option>OOCL</option></datalist>
 <div id="diff"></div>
 <div id="out"><div class="empty">請先上傳訂單明細檔。上傳後資料會保留在頁面上，下次開啟不需重新上傳；再上傳新檔時，會先和現有資料比對，確認後才更新。</div></div>
 </main>
@@ -85,7 +88,7 @@ function readWb(buf){const wb=XLSX.read(buf,{type:'array',cellDates:true});
 function ingest(rows){
  if(!rows.length)return;
  if('PO號碼' in rows[0]){rows.forEach(r=>{if(!r['PO號碼'])return;const o=fill[r['PO號碼']]=fill[r['PO號碼']]||{};
-  [['pi','PI單號'],['inv','INV號碼'],['bl','B/L號碼'],['h','H號'],['sps','SPS'],['t','關稅%'],['c','報關日'],['r','放行日'],['u','拆櫃日'],['s','入庫日']].forEach(([k,h])=>{if(r[h]!=null&&r[h]!=='')o[k]=k==='sps'?(/^(v|1|是|true)$/i.test(String(r[h]).trim())?'1':''):String(r[h])})});save();Object.keys(fill).forEach(k=>dirty.add(k));flush();return}
+  [['pi','PI單號'],['inv','INV號碼'],['bl','B/L號碼'],['cr','船公司'],['h','H號'],['sps','SPS'],['t','關稅%'],['c','報關日'],['r','放行日'],['u','拆櫃日'],['s','入庫日']].forEach(([k,h])=>{if(r[h]!=null&&r[h]!=='')o[k]=k==='sps'?(/^(v|1|是|true)$/i.test(String(r[h]).trim())?'1':''):String(r[h])})});save();Object.keys(fill).forEach(k=>dirty.add(k));flush();return}
  if(!('採購單號' in rows[0]))return;
  const m={};
  rows.forEach(r=>{const po=String(r['採購單號']||'').trim();if(!/^[A-Za-z]\d/.test(po))return;
@@ -100,6 +103,22 @@ const topIt=o=>Object.entries(o.it).sort((a,b)=>b[1]-a[1]).map(x=>x[0])[0]||'';
 const allIt=o=>Object.entries(o.it).sort((a,b)=>b[1]-a[1]).map(x=>x[0]+'('+num(x[1],0)+')').join('、');
 const rt=o=>o.fc?o.base/o.fc:1;
 const DT={D:0,N:0,S:0,C:9};
+const CARRIERS=[
+ ['長榮|evergreen|emc','長榮海運 ShipmentLink','https://www.shipmentlink.com/servlet/TDB1_CargoTracking.do'],
+ ['陽明|yang ming|yangming|yml','陽明海運','https://www.yangming.com/e-service/track_trace/track_trace_cargo_tracking.aspx'],
+ ['萬海|wan hai|wanhai|whl','萬海航運','https://www.wanhai.com/views/cargoTrack/CargoTrack.xhtml'],
+ ['maersk|馬士基','Maersk','https://www.maersk.com/tracking/{bl}'],
+ ['msc|地中海','MSC','https://www.msc.com/en/track-a-shipment'],
+ ['hapag|赫伯羅特','Hapag-Lloyd','https://www.hapag-lloyd.com/en/online-business/track/track-by-booking-solution.html'],
+ ['cma|達飛','CMA CGM','https://www.cma-cgm.com/ebusiness/tracking'],
+ ['one|ocean network','ONE','https://ecomm.one-line.com/one-ecom/manage-shipment/cargo-tracking'],
+ ['cosco|中遠','中遠海運 COSCO','https://elines.coscoshipping.com/ebusiness/cargoTracking'],
+ ['hmm|現代商船','HMM','https://www.hmm21.com/e-service/general/trackNTrace/TrackNTrace.do'],
+ ['zim|以星','ZIM','https://www.zim.com/tools/track-a-shipment'],
+ ['oocl|東方海外','OOCL','https://www.oocl.com/eng/ourservices/eservices/cargotracking/']];
+function trkFind(cr){const c=String(cr||'').trim().toLowerCase();if(!c)return null;return CARRIERS.find(x=>x[0].split('|').some(k=>c.includes(k)))||null}
+function trkUrl(cr,bl){const f=trkFind(cr);return f?f[2].replace('{bl}',encodeURIComponent(bl)):'https://www.searates.com/container/tracking/?number='+encodeURIComponent(bl)}
+function trkName(cr){const f=trkFind(cr);return f?'前往'+f[1]+'查詢':'未指定船公司，前往 SeaRates 通用查詢'}
 function fDef(o){const n=topIt(o),og=Object.entries(o.og[n]||{}).sort((a,b)=>b[1]-a[1]).map(x=>x[0])[0]||'';
  if(n.includes('福氣魚'))return og.includes('紐西蘭')?'0':og.includes('澳')?'15':'';
  if(n.includes('菲力'))return '15';
@@ -134,9 +153,9 @@ function render(){
  const tot=L.reduce((s,o)=>s+amt(o),0),wait=L.filter(o=>status(o)[1]==='w').length,transit=L.filter(o=>status(o)[0]==='在途').length,done=L.filter(o=>['已拆櫃','已入庫'].includes(status(o)[0])).length;
  $('#out').innerHTML=`<div class="kpis"><div class="k"><b>${L.length}</b><span>訂單數</span></div><div class="k"><b>${num(tot)}</b><span>採購金額（萬元）</span></div><div class="k"><b>${transit}</b><span>在途</span></div><div class="k"><b style="color:var(--warn)">${wait}</b><span>已到港／到貨，待報關或入庫</span></div><div class="k"><b>${done}</b><span>已拆櫃／已入庫</span></div></div>
  <div class="two">${mtab('依 PO 建立日（建檔年月）',group(L,'cd'))}${mtab('依到港日',group(L,'ad'))}</div>
- <div class="card"><h2>訂單追蹤（同一採購單號為一筆）</h2><div class="sc" style="max-height:560px"><table class="trk"><tr><th>進度</th><th>建檔年月</th><th>PO號碼</th><th>品項</th><th>來源</th><th>供應商</th><th>PI單號</th><th>INV號碼</th><th>B/L號碼</th><th>H號</th><th>SPS</th><th>到港日</th><th class="n">匯率</th><th>關稅%</th><th class="n">金額(萬)</th><th>報關日</th><th>放行日</th><th>拆櫃日</th><th>入庫日</th></tr>`+
+ <div class="card"><h2>訂單追蹤（同一採購單號為一筆）</h2><div class="sc" style="max-height:560px"><table class="trk"><tr><th>進度</th><th>建檔年月</th><th>PO號碼</th><th>品項</th><th>來源</th><th>供應商</th><th>PI單號</th><th>INV號碼</th><th>B/L號碼</th><th>船公司</th><th>查進度</th><th>H號</th><th>SPS</th><th>到港日</th><th class="n">匯率</th><th>關稅%</th><th class="n">金額(萬)</th><th>報關日</th><th>放行日</th><th>拆櫃日</th><th>入庫日</th></tr>`+
  L.map(o=>{const s=status(o),S=o.po[0].toUpperCase()==='S',CUS=!'DCN'.includes(o.po[0].toUpperCase()),F=o.po[0].toUpperCase()==='F',i=(k,t,c)=>`<input ${c||''} type="${t}" value="${e(fx(o,k))}" data-p="${e(o.po)}" data-k="${k}">`;
-  return `<tr><td><span class="st ${s[1]}">${s[0]}</span></td><td>${ym(o.cd)}</td><td>${e(o.po)}</td><td class="it" title="${e(allIt(o))}">${e(topIt(o))||'—'}</td><td>${SRC[o.po[0].toUpperCase()]||'—'}</td><td>${e(o.sup)}</td><td>${i('pi','text')}</td><td>${i('inv','text')}</td><td>${i('bl','text')}</td><td>${S?i('h','text','class="s"'):'<input class="s" disabled>'}</td><td style="text-align:center"><input type="checkbox" ${S?'':'disabled'} ${fx(o,'sps')==='1'?'checked':''} data-p="${e(o.po)}" data-k="sps"></td><td>${ymd(o.ad)}</td><td class="n">${num(rt(o),3)}</td><td><input class="s${tf(o)===''?' need':''}" type="number" step="0.1" value="${e(tf(o))}" data-p="${e(o.po)}" data-k="t"></td><td class="n">${num(amt(o))}</td>${['c','r','u'].map(k=>`<td>${CUS?i(k,'date'):'<input disabled>'}</td>`).join('')}<td>${(!CUS||F)?i('s','date'):'<input disabled>'}</td></tr>`}).join('')+`</table></div></div>`;
+  return `<tr><td><span class="st ${s[1]}">${s[0]}</span></td><td>${ym(o.cd)}</td><td>${e(o.po)}</td><td class="it" title="${e(allIt(o))}">${e(topIt(o))||'—'}</td><td>${SRC[o.po[0].toUpperCase()]||'—'}</td><td>${e(o.sup)}</td><td>${i('pi','text')}</td><td>${i('inv','text')}</td><td>${i('bl','text')}</td><td>${i('cr','text','list="crs"')}</td><td style="text-align:center">${fx(o,'bl')?`<a class="trkbtn" target="_blank" rel="noopener" data-bl="${e(fx(o,'bl'))}" href="${e(trkUrl(fx(o,'cr'),fx(o,'bl')))}" title="${e(trkName(fx(o,'cr')))}（已複製 B/L 號碼）">查進度</a>`:'<span class="trkbtn off">查進度</span>'}</td><td>${S?i('h','text','class="s"'):'<input class="s" disabled>'}</td><td style="text-align:center"><input type="checkbox" ${S?'':'disabled'} ${fx(o,'sps')==='1'?'checked':''} data-p="${e(o.po)}" data-k="sps"></td><td>${ymd(o.ad)}</td><td class="n">${num(rt(o),3)}</td><td><input class="s${tf(o)===''?' need':''}" type="number" step="0.1" value="${e(tf(o))}" data-p="${e(o.po)}" data-k="t"></td><td class="n">${num(amt(o))}</td>${['c','r','u'].map(k=>`<td>${CUS?i(k,'date'):'<input disabled>'}</td>`).join('')}<td>${(!CUS||F)?i('s','date'):'<input disabled>'}</td></tr>`}).join('')+`</table></div></div>`;
 }
 function rerender(){
  const sc=[...document.querySelectorAll('.sc')].map(x=>[x.scrollTop,x.scrollLeft]),y=window.scrollY,a=document.activeElement,k=a&&a.dataset&&a.dataset.p?[a.dataset.p,a.dataset.k]:null;
@@ -149,6 +168,7 @@ document.addEventListener('change',ev=>{const t=ev.target;
  if(t.dataset&&t.dataset.p){(fill[t.dataset.p]=fill[t.dataset.p]||{})[t.dataset.k]=t.type==='checkbox'?(t.checked?'1':''):t.value;save();dirty.add(t.dataset.p);flush();setTimeout(rerender,0)}});
 ['fy','src','am','it'].forEach(id=>$('#'+id).addEventListener('change',render));
 $('#q').addEventListener('input',render);
+document.addEventListener('click',ev=>{const a=ev.target.closest&&ev.target.closest('a.trkbtn');if(a&&a.dataset.bl&&navigator.clipboard)navigator.clipboard.writeText(a.dataset.bl).catch(()=>{})});
 let DB=null,fail=false,busy=false,meta={t:0},pending=null;const dirty=new Set(),dirtyM=new Set();
 const LSO='proc_orders_v1';
 const ser=o=>({po:o.po,cd:o.cd?+o.cd:null,ad:o.ad?+o.ad:null,sup:o.sup,fc:o.fc,base:o.base,n:o.n,it:Object.entries(o.it),og:Object.entries(o.og).map(([k,g])=>[k,Object.entries(g)])});
@@ -217,8 +237,8 @@ $('#f').addEventListener('change',async ev=>{
  setup();render();if(staged)proposeUpdate(staged);ev.target.value='';});
 $('#ex').addEventListener('click',async()=>{
  if(!pos.length){alert('請先上傳訂單明細');return}
- const H=['建檔年月','PO號碼','品項','PI單號','INV號碼','B/L號碼','H號','SPS','匯率','關稅%','報關日','放行日','拆櫃日','入庫日','來源','供應商','到港日','台幣採購金額(萬元)','進度'];
- const A=[H,...pos.map(o=>[ym(o.cd),o.po,topIt(o),fx(o,'pi'),fx(o,'inv'),fx(o,'bl'),fx(o,'h'),fx(o,'sps')==='1'?'V':'',+rt(o).toFixed(3),tf(o),fx(o,'c'),fx(o,'r'),fx(o,'u'),fx(o,'s'),SRC[o.po[0].toUpperCase()]||'',o.sup,ymd(o.ad),+amt(o).toFixed(2),status(o)[0]])];
+ const H=['建檔年月','PO號碼','品項','PI單號','INV號碼','B/L號碼','船公司','H號','SPS','匯率','關稅%','報關日','放行日','拆櫃日','入庫日','來源','供應商','到港日','台幣採購金額(萬元)','進度'];
+ const A=[H,...pos.map(o=>[ym(o.cd),o.po,topIt(o),fx(o,'pi'),fx(o,'inv'),fx(o,'bl'),fx(o,'cr'),fx(o,'h'),fx(o,'sps')==='1'?'V':'',+rt(o).toFixed(3),tf(o),fx(o,'c'),fx(o,'r'),fx(o,'u'),fx(o,'s'),SRC[o.po[0].toUpperCase()]||'',o.sup,ymd(o.ad),+amt(o).toFixed(2),status(o)[0]])];
  const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(A),'訂單追蹤');const buf=XLSX.write(wb,{bookType:'xlsx',type:'array'});
  let d=null;try{d=window.claude&&await claude.use('downloads')}catch(x){}
  if(!d){XLSX.writeFile(wb,'採購追蹤_填寫資料.xlsx');return}
