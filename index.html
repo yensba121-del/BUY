@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="zh-Hant"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>採購訂單追蹤儀表板</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root{--bg:#f5f6f4;--fg:#1c2a2e;--mut:#65737a;--card:#fff;--line:#d8ddda;--ac:#0e6a6d;--ac2:#d9ecec;--warn:#a96a10;--bad:#b0402c;--ok:#2f7a4b;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#11181a;--fg:#e4ecec;--mut:#8fa0a5;--card:#192225;--line:#2b383c;--ac:#4cc0c3;--ac2:#1d3a3c;--warn:#e0a24a;--bad:#e5806c;--ok:#6cc58c}}
+:root[data-theme="dark"]{--bg:#11181a;--fg:#e4ecec;--mut:#8fa0a5;--card:#192225;--line:#2b383c;--ac:#4cc0c3;--ac2:#1d3a3c;--warn:#e0a24a;--bad:#e5806c;--ok:#6cc58c}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.5 "Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif}
+main{max-width:1280px;margin:0 auto;padding:20px 16px 48px}
+h1{font-size:22px;margin:0 0 4px}h2{font-size:15px;margin:0 0 10px}
+.sub{color:var(--mut);margin:0 0 16px}
+.bar{display:flex;flex-wrap:wrap;gap:10px;align-items:end;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:12px;margin-bottom:16px}
+label{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--mut)}
+select,input,button{font:inherit;color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:6px 8px}
+button{cursor:pointer;background:var(--ac);color:#fff;border-color:var(--ac)}
+button.g{background:transparent;color:var(--ac)}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--ac);outline-offset:1px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:16px}
+.k{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:10px 12px}
+.k b{display:block;font-size:24px;font-variant-numeric:tabular-nums}.k span{color:var(--mut);font-size:12px}
+.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:16px;margin-bottom:16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:12px;min-width:0}
+.sc{overflow-x:auto;max-width:100%}
+table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
+th,td{padding:5px 8px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}
+th{font-size:12px;color:var(--mut);font-weight:600;position:sticky;top:0;background:var(--card)}
+td.n,th.n{text-align:right}
+.m{height:8px;background:var(--ac);border-radius:4px;min-width:2px}
+td.it{max-width:200px;overflow:hidden;text-overflow:ellipsis}
+td input{width:104px;padding:3px 5px}td input.s{width:64px}td input.need{background:color-mix(in srgb,var(--ok) 30%,var(--card));border-color:var(--ok)}
+td input[type=checkbox]{width:auto;padding:0;transform:scale(1.25)}
+td input:disabled{opacity:.35}
+.st{font-size:12px;padding:1px 8px;border-radius:10px;background:var(--ac2);color:var(--ac)}
+.st.w{background:transparent;border:1px solid var(--warn);color:var(--warn)}.st.o{color:var(--ok);background:transparent;border:1px solid var(--ok)}
+.empty{padding:40px 16px;text-align:center;color:var(--mut)}
+
+.trk th:nth-child(-n+6),.trk td:nth-child(-n+6){position:sticky;background:var(--card);z-index:1;overflow:hidden;text-overflow:ellipsis}
+.trk th:nth-child(-n+6){z-index:3}
+.trk th:nth-child(1),.trk td:nth-child(1){left:0;width:132px;min-width:132px;max-width:132px}
+.trk th:nth-child(2),.trk td:nth-child(2){left:132px;width:80px;min-width:80px;max-width:80px}
+.trk th:nth-child(3),.trk td:nth-child(3){left:212px;width:100px;min-width:100px;max-width:100px}
+.trk th:nth-child(4),.trk td:nth-child(4){left:312px;width:180px;min-width:180px;max-width:180px}
+.trk th:nth-child(5),.trk td:nth-child(5){left:492px;width:84px;min-width:84px;max-width:84px}
+.trk th:nth-child(6),.trk td:nth-child(6){left:576px;width:170px;min-width:170px;max-width:170px;box-shadow:2px 0 0 var(--line)}
+@media(max-width:900px){.trk th:nth-child(n+2),.trk td:nth-child(n+2){position:static;left:auto;box-shadow:none}.trk th:nth-child(n+2){position:sticky;left:auto}.trk th:nth-child(1),.trk td:nth-child(1){box-shadow:2px 0 0 var(--line)}}
+</style></head><body><main>
+<h1>採購訂單追蹤儀表板</h1>
+<p class="sub">金額單位：萬元（台幣）。台幣金額＝PO單價 × 匯率 × (1＋關稅%) × 主檔採購數量 ÷ 10,000。關稅欄呈綠底，表示尚無預設值，需要填入。</p>
+<div class="bar">
+<label>上傳訂單明細（.xls / .xlsx）或先前匯出的填寫檔<input type="file" id="f" accept=".xls,.xlsx" multiple></label>
+<label>會計年度（7月～隔年6月）<select id="fy"></select></label>
+<label>訂單來源<select id="src"></select></label>
+<label>到港年月<select id="am"></select></label>
+<label>品項（小類）<select id="it"></select></label>
+<button id="ex" class="g">匯出填寫資料</button>
+<span id="sv" class="sub" style="margin:0;align-self:center"></span>
+</div>
+<div id="out"><div class="empty">請先上傳訂單明細檔。填入的 INV、B/L、H號、關稅與報關日期會暫存在這個瀏覽器，也可以匯出成 Excel 備份。</div></div>
+</main>
+<script>
+const SRC={D:'國內採購',C:'中國採購',S:'貿易單',F:'進口採購',N:'兩廠代工'};
+const LS='proc_fill_v1';let fill={},pos=[];
+try{fill=JSON.parse(localStorage.getItem(LS)||'{}')}catch(e){}
+const save=()=>{try{localStorage.setItem(LS,JSON.stringify(fill))}catch(e){}};
+const $=s=>document.querySelector(s);
+const e=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const p2=n=>String(n).padStart(2,'0');
+const ym=d=>d?d.getFullYear()+'/'+p2(d.getMonth()+1):'—';
+const ymd=d=>d?ym(d)+'/'+p2(d.getDate()):'—';
+const fyOf=d=>d.getMonth()>=6?d.getFullYear()+1:d.getFullYear();
+const num=(x,d=1)=>x.toLocaleString('zh-TW',{minimumFractionDigits:d,maximumFractionDigits:d});
+const fx=(o,k)=>(fill[o.po]||{})[k]||'';
+const dt=v=>v instanceof Date?new Date(v.getTime()+60000):null;
+function readWb(buf){const wb=XLSX.read(buf,{type:'array',cellDates:true});
+ return XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:null});}
+function ingest(rows){
+ if(!rows.length)return;
+ if('PO號碼' in rows[0]){rows.forEach(r=>{if(!r['PO號碼'])return;const o=fill[r['PO號碼']]=fill[r['PO號碼']]||{};
+  [['pi','PI單號'],['inv','INV號碼'],['bl','B/L號碼'],['h','H號'],['sps','SPS'],['t','關稅%'],['c','報關日'],['r','放行日'],['u','拆櫃日'],['s','入庫日']].forEach(([k,h])=>{if(r[h]!=null&&r[h]!=='')o[k]=k==='sps'?(/^(v|1|是|true)$/i.test(String(r[h]).trim())?'1':''):String(r[h])})});save();Object.keys(fill).forEach(k=>dirty.add(k));flush();return}
+ if(!('採購單號' in rows[0]))return;
+ const m={};
+ rows.forEach(r=>{const po=String(r['採購單號']||'').trim();if(!/^[A-Za-z]\d/.test(po))return;
+  const o=m[po]=m[po]||{po,base:0,sup:r['供應商']||'',it:{},og:{},fc:0,cd:null,ad:null,n:0};
+  if(r['小類']){const k=String(r['小類']).trim(),q=+r['主檔採購數量']||0,or=String(r['產地']||'').trim(),g=(o.og[k]=o.og[k]||{});o.it[k]=(o.it[k]||0)+q;g[or]=(g[or]||0)+q}
+  o.fc+=(+r['PO單價']||0)*(+r['主檔採購數量']||0);o.base+=(+r['PO單價']||0)*(+r['匯率轉換日']||1)*(+r['主檔採購數量']||0);o.n++;
+  const c=dt(r['PO建立日']),a=dt(r['到港日']);
+  if(c&&(!o.cd||c<o.cd))o.cd=c;if(a&&(!o.ad||a>o.ad))o.ad=a});
+ pos=Object.values(m);
+}
+const topIt=o=>Object.entries(o.it).sort((a,b)=>b[1]-a[1]).map(x=>x[0])[0]||'';
+const allIt=o=>Object.entries(o.it).sort((a,b)=>b[1]-a[1]).map(x=>x[0]+'('+num(x[1],0)+')').join('、');
+const rt=o=>o.fc?o.base/o.fc:1;
+const DT={D:0,N:0,S:0,C:9};
+function fDef(o){const n=topIt(o),og=Object.entries(o.og[n]||{}).sort((a,b)=>b[1]-a[1]).map(x=>x[0])[0]||'';
+ if(n.includes('福氣魚'))return og.includes('紐西蘭')?'0':og.includes('澳')?'15':'';
+ if(n.includes('菲力'))return '15';
+ if(n.includes('銀鮭')||n.includes('大西洋鮭'))return '10';
+ if(n.includes('圓鱈')&&n.includes('副品'))return '25';
+ if(n.includes('哈克'))return '10';
+ if(n.includes('鮭魚')&&n.includes('副產品'))return '15';
+ return ''}
+function tf(o){const v=fx(o,'t');if(v!=='')return v;const L=o.po[0].toUpperCase();if(L==='F')return fDef(o);const d=DT[L];return d==null?'':String(d)}
+function amt(o){return o.base*(1+(parseFloat(tf(o))||0)/100)/10000}
+function status(o){const t=new Date();
+ if('DCN'.includes(o.po[0].toUpperCase())){if(fx(o,'s'))return['已入庫','o'];if(o.ad&&o.ad<=t)return['已到貨，待入庫','w'];return['在途','']}
+ if(o.po[0].toUpperCase()==='F'&&fx(o,'s'))return['已入庫','o'];if(fx(o,'u'))return['已拆櫃','o'];if(fx(o,'r'))return['已放行','o'];if(fx(o,'c'))return['已報關',''];
+ if(o.ad&&o.ad<=t)return['已到港，待報關','w'];return['在途',''];}
+function opts(el,items,all){const cur=el.value;el.innerHTML=`<option value="">${all}</option>`+items.map(i=>`<option>${e(i)}</option>`).join('');if(items.includes(cur))el.value=cur}
+function setup(){
+ opts($('#fy'),[...new Set(pos.filter(o=>o.cd).map(o=>fyOf(o.cd)))].sort().reverse().map(String),'全部年度');
+ opts($('#src'),Object.keys(SRC).filter(k=>pos.some(o=>o.po[0].toUpperCase()===k)).map(k=>k+' '+SRC[k]),'全部來源');
+ opts($('#it'),[...new Set(pos.map(topIt).filter(Boolean))].sort(),'全部品項');
+ opts($('#am'),[...new Set(pos.map(o=>ym(o.ad)))].filter(x=>x!=='—').sort(),'全部月份');
+}
+function group(list,key){const g={};list.forEach(o=>{const k=ym(o[key]);(g[k]=g[k]||{n:0,a:0,s:{}});g[k].n++;g[k].a+=amt(o);const c=o.po[0].toUpperCase();g[k].s[c]=(g[k].s[c]||0)+1});return g}
+function mtab(title,g){const ks=Object.keys(g).sort(),mx=Math.max(1,...ks.map(k=>g[k].a));
+ return `<div class="card"><h2>${title}</h2><div class="sc"><table><tr><th>年月</th><th class="n">訂單數</th>${Object.keys(SRC).map(c=>`<th class="n" title="${SRC[c]}">${c}單</th>`).join('')}<th class="n">金額(萬)</th><th style="width:25%"></th></tr>`+
+ ks.map(k=>`<tr><td>${k}</td><td class="n">${g[k].n}</td>${Object.keys(SRC).map(c=>`<td class="n">${g[k].s[c]||'–'}</td>`).join('')}<td class="n">${num(g[k].a)}</td><td><div class="m" style="width:${g[k].a/mx*100}%"></div></td></tr>`).join('')+`</table></div></div>`}
+function render(){
+ if(!pos.length)return;
+ const fyv=$('#fy').value,sv=$('#src').value.slice(0,1),av=$('#am').value,iv=$('#it').value;
+ const ok=(o,ski)=>(!fyv||(o.cd&&String(fyOf(o.cd))===fyv))&&(!sv||o.po[0].toUpperCase()===sv)&&(!av||ym(o.ad)===av)&&(ski||!iv||topIt(o)===iv);
+ const L=pos.filter(o=>ok(o)).sort((a,b)=>(b.cd||0)-(a.cd||0));
+ const tot=L.reduce((s,o)=>s+amt(o),0),wait=L.filter(o=>status(o)[1]==='w').length,transit=L.filter(o=>status(o)[0]==='在途').length,done=L.filter(o=>['已拆櫃','已入庫'].includes(status(o)[0])).length;
+ $('#out').innerHTML=`<div class="kpis"><div class="k"><b>${L.length}</b><span>訂單數</span></div><div class="k"><b>${num(tot)}</b><span>採購金額（萬元）</span></div><div class="k"><b>${transit}</b><span>在途</span></div><div class="k"><b style="color:var(--warn)">${wait}</b><span>已到港／到貨，待報關或入庫</span></div><div class="k"><b>${done}</b><span>已拆櫃／已入庫</span></div></div>
+ <div class="two">${mtab('依 PO 建立日（建檔年月）',group(L,'cd'))}${mtab('依到港日',group(L,'ad'))}</div>
+ <div class="card"><h2>訂單追蹤（同一採購單號為一筆）</h2><div class="sc" style="max-height:560px"><table class="trk"><tr><th>進度</th><th>建檔年月</th><th>PO號碼</th><th>品項</th><th>來源</th><th>供應商</th><th>PI單號</th><th>INV號碼</th><th>B/L號碼</th><th>H號</th><th>SPS</th><th>到港日</th><th class="n">匯率</th><th>關稅%</th><th class="n">金額(萬)</th><th>報關日</th><th>放行日</th><th>拆櫃日</th><th>入庫日</th></tr>`+
+ L.map(o=>{const s=status(o),S=o.po[0].toUpperCase()==='S',CUS=!'DCN'.includes(o.po[0].toUpperCase()),F=o.po[0].toUpperCase()==='F',i=(k,t,c)=>`<input ${c||''} type="${t}" value="${e(fx(o,k))}" data-p="${e(o.po)}" data-k="${k}">`;
+  return `<tr><td><span class="st ${s[1]}">${s[0]}</span></td><td>${ym(o.cd)}</td><td>${e(o.po)}</td><td class="it" title="${e(allIt(o))}">${e(topIt(o))||'—'}</td><td>${SRC[o.po[0].toUpperCase()]||'—'}</td><td>${e(o.sup)}</td><td>${i('pi','text')}</td><td>${i('inv','text')}</td><td>${i('bl','text')}</td><td>${S?i('h','text','class="s"'):'<input class="s" disabled>'}</td><td style="text-align:center"><input type="checkbox" ${S?'':'disabled'} ${fx(o,'sps')==='1'?'checked':''} data-p="${e(o.po)}" data-k="sps"></td><td>${ymd(o.ad)}</td><td class="n">${num(rt(o),3)}</td><td><input class="s${tf(o)===''?' need':''}" type="number" step="0.1" value="${e(tf(o))}" data-p="${e(o.po)}" data-k="t"></td><td class="n">${num(amt(o))}</td>${['c','r','u'].map(k=>`<td>${CUS?i(k,'date'):'<input disabled>'}</td>`).join('')}<td>${(!CUS||F)?i('s','date'):'<input disabled>'}</td></tr>`}).join('')+`</table></div></div>`;
+}
+function rerender(){
+ const sc=[...document.querySelectorAll('.sc')].map(x=>[x.scrollTop,x.scrollLeft]),y=window.scrollY,a=document.activeElement,k=a&&a.dataset&&a.dataset.p?[a.dataset.p,a.dataset.k]:null;
+ render();
+ document.querySelectorAll('.sc').forEach((x,i)=>{if(sc[i]){x.scrollTop=sc[i][0];x.scrollLeft=sc[i][1]}});
+ window.scrollTo(0,y);
+ if(k){const n=[...document.querySelectorAll('input[data-p]')].find(x=>x.dataset.p===k[0]&&x.dataset.k===k[1]);if(n)n.focus({preventScroll:true})}
+}
+document.addEventListener('change',ev=>{const t=ev.target;
+ if(t.dataset&&t.dataset.p){(fill[t.dataset.p]=fill[t.dataset.p]||{})[t.dataset.k]=t.type==='checkbox'?(t.checked?'1':''):t.value;save();dirty.add(t.dataset.p);flush();setTimeout(rerender,0)}});
+['fy','src','am','it'].forEach(id=>$('#'+id).addEventListener('change',render));
+let DB=null,fail=false,busy=false;const dirty=new Set();
+function stat(){$('#sv').textContent=!DB?'填寫資料暫存在此瀏覽器':fail?'雲端存底失敗，資料仍暫存在此瀏覽器':'已存底 '+Object.keys(fill).length+' 筆填寫資料（以 PO 號碼對應，上傳新明細會自動帶入）'}
+async function flush(){if(busy||!DB)return;busy=true;
+ while(dirty.size){const po=[...dirty][0];dirty.delete(po);
+  try{await DB.collection('fills').doc(po).set(fill[po]||{});fail=false}catch(x){fail=true}}
+ busy=false;stat()}
+async function initDb(){
+ try{DB=window.claude?await claude.use('db'):null}catch(x){DB=null}
+ if(!DB){stat();return}
+ try{const snap=await DB.collection('fills').get(),have=new Set();
+  snap.docs.forEach(d=>{have.add(d.id);fill[d.id]=Object.assign({},fill[d.id],d.data())});
+  Object.keys(fill).forEach(po=>{if(!have.has(po))dirty.add(po)});
+  save();render();flush()}catch(x){fail=true}
+ stat()}
+$('#f').addEventListener('change',async ev=>{
+ const fs=[...ev.target.files].sort((a,b)=>(/填寫/.test(b.name)?1:0)-(/填寫/.test(a.name)?1:0));
+ for(const f of fs){try{ingest(readWb(await f.arrayBuffer()))}catch(x){alert('無法讀取：'+f.name)}}
+ setup();render();ev.target.value='';});
+$('#ex').addEventListener('click',async()=>{
+ if(!pos.length){alert('請先上傳訂單明細');return}
+ const H=['建檔年月','PO號碼','品項','PI單號','INV號碼','B/L號碼','H號','SPS','匯率','關稅%','報關日','放行日','拆櫃日','入庫日','來源','供應商','到港日','台幣採購金額(萬元)','進度'];
+ const A=[H,...pos.map(o=>[ym(o.cd),o.po,topIt(o),fx(o,'pi'),fx(o,'inv'),fx(o,'bl'),fx(o,'h'),fx(o,'sps')==='1'?'V':'',+rt(o).toFixed(3),tf(o),fx(o,'c'),fx(o,'r'),fx(o,'u'),fx(o,'s'),SRC[o.po[0].toUpperCase()]||'',o.sup,ymd(o.ad),+amt(o).toFixed(2),status(o)[0]])];
+ const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(A),'訂單追蹤');const buf=XLSX.write(wb,{bookType:'xlsx',type:'array'});
+ let d=null;try{d=window.claude&&await claude.use('downloads')}catch(x){}
+ if(!d){XLSX.writeFile(wb,'採購追蹤_填寫資料.xlsx');return}
+ try{await d.save({filename:'採購追蹤_填寫資料.xlsx',data:buf})}catch(x){if(!x||x.code!=='declined')alert('匯出失敗：'+((x&&x.message)||'未知錯誤'))}
+});
+stat();initDb();
+</script></body></html>
