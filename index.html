@@ -52,6 +52,7 @@ td input:disabled{opacity:.35}
 .trk th:nth-child(5),.trk td:nth-child(5){left:492px;width:84px;min-width:84px;max-width:84px}
 .trk th:nth-child(6),.trk td:nth-child(6){left:576px;width:170px;min-width:170px;max-width:170px;box-shadow:2px 0 0 var(--line)}
 @media(max-width:900px){.trk th:nth-child(n+2),.trk td:nth-child(n+2){position:static;left:auto;box-shadow:none}.trk th:nth-child(n+2){position:sticky;left:auto}.trk th:nth-child(1),.trk td:nth-child(1){box-shadow:2px 0 0 var(--line)}}
+.pdel.warn{background:var(--bad);border-color:var(--bad);color:#fff;white-space:nowrap}
 </style></head><body><main>
 <h1>採購訂單追蹤儀表板</h1>
 <p class="sub">金額單位：萬元（台幣）。台幣金額＝PO單價 × 匯率 × (1＋關稅%) × 主檔採購數量 ÷ 10,000。關稅欄呈綠底，表示尚無預設值，需要填入。</p>
@@ -71,6 +72,8 @@ td input:disabled{opacity:.35}
 <datalist id="crs"><option>長榮海運</option><option>陽明海運</option><option>萬海航運</option><option>Maersk</option><option>MSC</option><option>Hapag-Lloyd</option><option>CMA CGM</option><option>ONE</option><option>COSCO</option><option>HMM</option><option>ZIM</option><option>OOCL</option><option>WiseGrid</option></datalist>
 <div id="diff"></div>
 <div id="out"><div class="empty">請先上傳訂單明細檔。上傳後資料會保留在頁面上，下次開啟不需重新上傳；再上傳新檔時，會先和現有資料比對，確認後才更新。</div></div>
+<div id="plan"></div>
+<datalist id="its"></datalist><datalist id="sups"></datalist>
 </main>
 <script>
 const SRC={D:'國內採購',C:'中國採購',S:'貿易單',F:'進口採購',N:'兩廠代工'};
@@ -125,6 +128,68 @@ const crOf=o=>fx(o,'cr')||CR_DEF[o.po]||'';
 function trkFind(cr){const c=String(cr||'').trim().toLowerCase();if(!c)return null;return CARRIERS.find(x=>x[0].split('|').some(k=>c.includes(k)))||null}
 function trkUrl(cr,bl){const f=trkFind(cr);return f?f[2].replace('{bl}',encodeURIComponent(bl)):'https://www.searates.com/container/tracking/?number='+encodeURIComponent(bl)}
 function trkName(cr){const f=trkFind(cr);return f?'前往'+f[1]+'查詢':'未指定船公司，前往 SeaRates 通用查詢'}
+const PLK='proc_plan_v1',PLL='proc_planlog_v1';let plan=[],plog=[],ptm=null,pfm='',showLog=false,parm=null,pta=null;
+try{plan=JSON.parse(localStorage.getItem(PLK)||'[]')||[]}catch(x){plan=[]}
+try{plog=JSON.parse(localStorage.getItem(PLL)||'[]')||[]}catch(x){plog=[]}
+const PSTAT=['等PI','議價中','申請料號'],PTYPE=['F','D','N','S','C'];
+function planSave(){try{localStorage.setItem(PLK,JSON.stringify(plan));localStorage.setItem(PLL,JSON.stringify(plog))}catch(x){}
+ clearTimeout(ptm);ptm=setTimeout(async()=>{if(!DB)return;try{await DB.collection('plan').doc('list').set({rows:plan});await DB.collection('plan').doc('log').set({rows:plog})}catch(x){fail=true;stat()}},600)}
+const ptar=r=>{if(r.tariff!==''&&r.tariff!=null)return String(r.tariff);if(r.type==='F')return r.item?fDef({po:'F',it:{[r.item]:1},og:{}}):'';const d=DT[r.type];return d==null?'':String(d)};
+const pfx=r=>r.fx!==''&&r.fx!=null?String(r.fx):(r.type==='D'||r.type==='N'?'1':'');
+const pmon=r=>r.eta?String(r.eta).slice(0,7):'';
+const pfmt=t=>new Date(t).toLocaleString('zh-TW',{hour12:false});
+function pamt(r){const a=parseFloat(r.price),f=parseFloat(pfx(r)),q=parseFloat(r.qty),t=parseFloat(ptar(r))||0,c=parseFloat(r.cont),cc=isNaN(c)?1:c;
+ return(isNaN(a)||isNaN(f)||isNaN(q))?null:a*f*(1+t/100)*q*cc/10000}
+function prow(r){const T=ptar(r),a=pamt(r);
+ const inp=(f,t,c,ex)=>`<input ${c||''} type="${t}" ${ex||''} value="${e(r[f]??'')}" data-pid="${r.id}" data-f="${f}">`;
+ const sel=(f,l)=>`<select data-pid="${r.id}" data-f="${f}"><option value=""></option>${l.map(x=>`<option${r[f]===x?' selected':''}>${x}</option>`).join('')}</select>`;
+ return `<tr><td>${inp('item','text','list="its" style="width:210px"')}</td><td>${sel('type',PTYPE)}</td><td>${inp('sup','text','list="sups" style="width:170px"')}</td>
+ <td>${inp('price','number','class="s" style="width:84px"','step="any"')}</td><td>${inp('fx','number','class="s" style="width:76px"','step="any" placeholder="'+e(pfx(r))+'"')}</td>
+ <td><input class="s${T===''&&r.type?' need':''}" type="number" step="0.1" value="${e(T)}" data-pid="${r.id}" data-f="tariff"></td>
+ <td>${inp('dest','text','style="width:120px"')}</td><td>${inp('cont','number','class="s"','step="any"')}</td><td>${inp('qty','number','style="width:96px"','step="any"')}</td>
+ <td>${inp('etd','date')}</td><td>${inp('eta','date')}</td><td>${sel('status',PSTAT)}</td><td class="n">${a==null?'—':num(a)}</td><td>${inp('note','text','style="width:240px"')}</td>
+ <td><button class="g pdel${parm===r.id?' warn':''}" data-pid="${r.id}" title="刪除這一筆（會留下刪除紀錄）">${parm===r.id?'確定刪除？':'✕'}</button></td></tr>`}
+function renderPlan(){
+ const months=[...new Set(plan.map(pmon).filter(Boolean))].sort(),hasNone=plan.some(r=>!pmon(r));
+ if(pfm&&pfm!=='__none'&&!months.includes(pfm))pfm='';
+ if(pfm==='__none'&&!hasNone)pfm='';
+ const L=plan.filter(r=>!pfm||(pfm==='__none'?!pmon(r):pmon(r)===pfm));
+ const tot=L.reduce((t,r)=>t+(pamt(r)||0),0),cn=L.reduce((t,r)=>t+(parseFloat(r.cont)||0),0),sc=PSTAT.map(x=>x+' '+L.filter(r=>r.status===x).length).join('｜');
+ const g={};plan.forEach(r=>{const k=pmon(r)||'__none';(g[k]=g[k]||{n:0,c:0,a:0});g[k].n++;g[k].c+=parseFloat(r.cont)||0;g[k].a+=pamt(r)||0});
+ const gk=Object.keys(g).sort((a,b)=>a==='__none'?1:b==='__none'?-1:a.localeCompare(b)),lab=k=>k==='__none'?'未填到港日':k.replace('-','/');
+ const sum=gk.length?`<h2 style="margin-top:14px">各月預估到貨（點月份可篩選）</h2><div class="sc"><table><tr><th>預計到港年月</th><th class="n">筆數</th><th class="n">櫃數</th><th class="n">預估金額(萬)</th></tr>${gk.map(k=>`<tr><td><button class="g pm" data-m="${k}">${lab(k)}</button></td><td class="n">${g[k].n}</td><td class="n">${num(g[k].c,0)}</td><td class="n">${num(g[k].a)}</td></tr>`).join('')}</table></div>`:'';
+ const lg=showLog?`<h2 style="margin-top:14px">刪除紀錄（${plog.length} 筆）</h2><p class="sub" style="margin:0 0 6px">刪除的資料會留在這裡，可以還原。紀錄存放在瀏覽器的本機儲存空間（線上版另存雲端），沒有檔案路徑；要留存檔案請按「匯出刪除紀錄」，或使用「完整備份」。</p>
+ ${plog.length?`<div class="sc" style="max-height:300px"><table><tr><th>刪除時間</th><th>品項</th><th>性質</th><th>供應商</th><th class="n">單價</th><th class="n">櫃數</th><th class="n">貨量(每櫃)</th><th>預計到港日</th><th>狀態</th><th class="n">預估金額(萬)</th><th>註解</th><th></th></tr>${plog.slice().reverse().map(x=>{const r=x.row,a=pamt(r);return `<tr><td>${pfmt(x.t)}</td><td>${e(r.item)}</td><td>${e(r.type)}</td><td>${e(r.sup)}</td><td class="n">${e(r.price)}</td><td class="n">${e(r.cont)}</td><td class="n">${e(r.qty)}</td><td>${e(r.eta)}</td><td>${e(r.status)}</td><td class="n">${a==null?'—':num(a)}</td><td>${e(r.note)}</td><td><button class="g prs" data-t="${x.t}">還原</button></td></tr>`}).join('')}</table></div>`:'<div class="empty">目前沒有刪除紀錄</div>'}`:'';
+ $('#plan').innerHTML=`<div class="card" style="margin-top:16px"><h2>預計採購列表</h2>
+ <p class="sub" style="margin:0 0 8px">預估採購金額，預估金額(萬) ＝ 單價 × 匯率 × (1＋關稅%) × 貨量 × 櫃數 ÷ 10,000，貨量（每櫃）單位請與單價一致（例如都用公斤）。D、N 單匯率未填時以 1 計算，櫃數未填時以 1 計算；關稅欄綠底表示尚無預設值，需要填入。</p>
+ <div class="bar" style="margin-bottom:8px"><label>預計到港年月<select id="pfm"><option value="">全部</option>${months.map(m=>`<option value="${m}"${pfm===m?' selected':''}>${m.replace('-','/')}</option>`).join('')}${hasNone?`<option value="__none"${pfm==='__none'?' selected':''}>未填到港日</option>`:''}</select></label></div>
+ <div class="sc"><table><tr><th>品項</th><th>性質</th><th>供應商</th><th class="n">採購單價</th><th class="n">匯率</th><th>關稅%</th><th>到港目的地</th><th class="n">櫃數</th><th class="n">貨量(每櫃)</th><th>預計出港日</th><th>預計到港日</th><th>狀態</th><th class="n">預估金額(萬)</th><th>註解</th><th></th></tr>
+ ${L.length?L.map(prow).join(''):'<tr><td colspan="15" class="empty">'+(plan.length?'這個月份沒有資料':'尚無資料，按「新增一筆」開始建立。')+'</td></tr>'}
+ <tr style="font-weight:700"><td>${pfm?'篩選合計':'合計'}（${L.length} 筆）</td><td></td><td></td><td></td><td></td><td></td><td></td><td class="n">${num(cn,0)}</td><td></td><td></td><td></td><td></td><td class="n">${num(tot)}</td><td></td><td></td></tr></table></div>
+ <div class="row"><button id="pa">＋新增一筆</button><button id="pl" class="g">${showLog?'隱藏':'查看'}刪除紀錄（${plog.length}）</button>${showLog?'<button id="pex" class="g">匯出刪除紀錄</button>':''}<span class="sub" style="margin:0">${sc}</span></div>
+ ${sum}${lg}</div>`}
+function planRerender(){const sc=document.querySelector('#plan .sc'),sl=sc?sc.scrollLeft:0,y=window.scrollY,a=document.activeElement,k=a&&a.dataset&&a.dataset.pid?[a.dataset.pid,a.dataset.f]:null;
+ renderPlan();const n=document.querySelector('#plan .sc');if(n)n.scrollLeft=sl;window.scrollTo(0,y);
+ if(k){const el=[...document.querySelectorAll('#plan [data-pid]')].find(x=>x.dataset.pid===k[0]&&x.dataset.f===k[1]);if(el)el.focus({preventScroll:true})}}
+function exportLog(){if(!plog.length){alert('目前沒有刪除紀錄');return}
+ const H=['刪除時間','品項','性質','供應商','採購單價','匯率','關稅%','到港目的地','櫃數','貨量(每櫃)','預計出港日','預計到港日','狀態','預估金額(萬)','註解'];
+ const A=[H,...plog.slice().reverse().map(x=>{const r=x.row,a=pamt(r);return[pfmt(x.t),r.item,r.type,r.sup,r.price,pfx(r),ptar(r),r.dest,r.cont,r.qty,r.etd,r.eta,r.status,a==null?'':+a.toFixed(2),r.note||'']})];
+ const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(A),'刪除紀錄');
+ saveFile('預計採購_刪除紀錄.xlsx',XLSX.write(wb,{bookType:'xlsx',type:'array'}),'application/octet-stream')}
+document.addEventListener('change',ev=>{const t=ev.target;
+ if(t.id==='pfm'){pfm=t.value;planRerender();return}
+ if(!t.dataset||!t.dataset.pid)return;
+ const r=plan.find(x=>x.id===t.dataset.pid);if(!r)return;r[t.dataset.f]=t.value;planSave();setTimeout(planRerender,0)});
+document.addEventListener('click',ev=>{const c=ev.target.closest&&ev.target.closest('#pa,.pdel,.pm,#pl,.prs,#pex');if(!c)return;
+ if(c.id==='pa'){pfm='';plan.push({id:'p'+Date.now().toString(36)+Math.random().toString(36).slice(2,6),item:'',type:'',sup:'',price:'',fx:'',tariff:'',dest:'',cont:'',qty:'',etd:'',eta:'',status:''});planSave();planRerender()}
+ else if(c.classList.contains('pdel')){const id=c.dataset.pid;
+  if(parm!==id){parm=id;clearTimeout(pta);pta=setTimeout(()=>{parm=null;planRerender()},4000);planRerender();return}
+  const r=plan.find(x=>x.id===id);clearTimeout(pta);parm=null;
+  if(r){plog.push({t:Date.now(),row:{...r}});plan=plan.filter(x=>x.id!==r.id);planSave()}planRerender()}
+ else if(c.classList.contains('pm')){pfm=c.dataset.m;planRerender()}
+ else if(c.id==='pl'){showLog=!showLog;planRerender()}
+ else if(c.id==='pex'){exportLog()}
+ else if(c.classList.contains('prs')){const x=plog.find(q=>String(q.t)===c.dataset.t);if(x){const r={...x.row};if(plan.some(q=>q.id===r.id))r.id='p'+Date.now().toString(36);plan.push(r);plog=plog.filter(q=>q!==x);planSave();planRerender()}}});
 function fDef(o){const n=topIt(o),og=Object.entries(o.og[n]||{}).sort((a,b)=>b[1]-a[1]).map(x=>x[0])[0]||'';
  if(n.includes('福氣魚'))return og.includes('紐西蘭')?'0':og.includes('澳')?'15':'';
  if(n.includes('菲力'))return '15';
@@ -141,6 +206,8 @@ function status(o){const t=new Date();
  if(o.ad&&o.ad<=t)return['已到港，待報關','w'];return['在途',''];}
 function opts(el,items,all){const cur=el.value;el.innerHTML=`<option value="">${all}</option>`+items.map(i=>`<option>${e(i)}</option>`).join('');if(items.includes(cur))el.value=cur}
 function setup(){
+ $('#its').innerHTML=[...new Set(pos.map(topIt).filter(Boolean))].sort().map(x=>`<option value="${e(x)}">`).join('');
+ $('#sups').innerHTML=[...new Set(pos.map(o=>o.sup).filter(Boolean))].sort().map(x=>`<option value="${e(x)}">`).join('');
  opts($('#fy'),[...new Set(pos.filter(o=>o.cd).map(o=>fyOf(o.cd)))].sort().reverse().map(String),'全部年度');
  opts($('#src'),Object.keys(SRC).filter(k=>pos.some(o=>o.po[0].toUpperCase()===k)).map(k=>k+' '+SRC[k]),'全部來源');
  opts($('#it'),[...new Set(pos.map(topIt).filter(Boolean))].sort(),'全部品項');
@@ -201,7 +268,11 @@ async function initDb(){
   if(!os.empty){const m=new Map();os.docs.forEach(d=>(d.data().pos||[]).forEach(x=>m.set(x.po,de(x))));pos=[...m.values()];
    const md=await DB.collection('meta').doc('orders').get();if(md.exists)meta=md.data();else meta={t:Date.now()};saveOrdersLocal();setup()}
   else if(pos.length){pos.forEach(o=>dirtyM.add(mkey(o)));if(!meta.t)meta.t=Date.now()}
-  render();flush()}catch(x){fail=true}
+  const pl=await DB.collection('plan').doc('list').get();
+  if(pl.exists&&Array.isArray(pl.data().rows)){plan=pl.data().rows.map(x=>({...x}));try{localStorage.setItem(PLK,JSON.stringify(plan))}catch(x){}}else if(plan.length)planSave();
+  const pg=await DB.collection('plan').doc('log').get();
+  if(pg.exists&&Array.isArray(pg.data().rows)){plog=pg.data().rows.map(x=>({...x}));try{localStorage.setItem(PLL,JSON.stringify(plog))}catch(x){}}else if(plog.length)planSave();
+  render();renderPlan();flush()}catch(x){fail=true}
  stat()}
 const sig=o=>[ymd(o.cd),ymd(o.ad),Math.round(o.base),Math.round(o.fc),o.sup,topIt(o),Math.round(Object.values(o.it).reduce((a,b)=>a+b,0))].join('|');
 const qty=o=>Object.values(o.it).reduce((a,b)=>a+b,0);
@@ -248,7 +319,7 @@ async function saveFile(name,data,mime){
 $('#bk').addEventListener('click',()=>{
  if(!pos.length&&!Object.keys(fill).length){alert('目前沒有資料可備份');return}
  const t=new Date(),n=t.getFullYear()+p2(t.getMonth()+1)+p2(t.getDate());
- saveFile('採購儀表板備份_'+n+'.json',JSON.stringify({app:'proc-dashboard',v:1,t:Date.now(),meta,pos:pos.map(ser),fill}),'application/json')});
+ saveFile('採購儀表板備份_'+n+'.json',JSON.stringify({app:'proc-dashboard',v:1,t:Date.now(),meta,pos:pos.map(ser),fill,plan,plog}),'application/json')});
 $('#rb').addEventListener('click',()=>$('#rs').click());
 $('#rs').addEventListener('change',async ev=>{
  const f=ev.target.files[0];ev.target.value='';if(!f)return;
@@ -256,9 +327,9 @@ $('#rs').addEventListener('change',async ev=>{
  if(!j||j.app!=='proc-dashboard'||!Array.isArray(j.pos)||!j.fill||typeof j.fill!=='object'){alert('這不是有效的備份檔');return}
  if(!confirm('還原會以備份檔覆蓋目前的資料。\n\n目前：訂單 '+pos.length+' 筆、填寫資料 '+Object.keys(fill).length+' 筆\n備份檔：訂單 '+j.pos.length+' 筆、填寫資料 '+Object.keys(j.fill).length+' 筆\n\n確定還原？'))return;
  if(DB){pos.forEach(o=>dirtyM.add(mkey(o)));Object.keys(fill).forEach(k=>dirty.add(k))}
- pos=j.pos.map(de);fill=j.fill;meta=j.meta&&j.meta.t?j.meta:{t:j.t||Date.now()};save();saveOrdersLocal();
+ pos=j.pos.map(de);fill=j.fill;plan=Array.isArray(j.plan)?j.plan:[];plog=Array.isArray(j.plog)?j.plog:[];planSave();meta=j.meta&&j.meta.t?j.meta:{t:j.t||Date.now()};save();saveOrdersLocal();
  if(DB){pos.forEach(o=>dirtyM.add(mkey(o)));Object.keys(fill).forEach(k=>dirty.add(k));flush()}
- pending=null;$('#diff').innerHTML='';setup();render();stat()});
+ pending=null;$('#diff').innerHTML='';setup();render();renderPlan();stat()});
 $('#ex').addEventListener('click',async()=>{
  if(!pos.length){alert('請先上傳訂單明細');return}
  const H=['建檔年月','PO號碼','品項','PI單號','INV號碼','B/L號碼','船公司','H號','SPS','匯率','關稅%','報關日','放行日','拆櫃日','入庫日','來源','供應商','到港日','台幣採購金額(萬元)','進度'];
@@ -269,5 +340,5 @@ $('#ex').addEventListener('click',async()=>{
  try{await d.save({filename:'採購追蹤_填寫資料.xlsx',data:buf})}catch(x){if(!x||x.code!=='declined')alert('匯出失敗：'+((x&&x.message)||'未知錯誤'))}
 });
 try{const j=JSON.parse(localStorage.getItem(LSO)||'null');if(j&&j.pos){pos=j.pos.map(de);meta=j.meta||meta;setup();render()}}catch(x){}
-stat();initDb();
+renderPlan();stat();initDb();
 </script></body></html>
